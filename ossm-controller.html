@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0d0e12">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>OSSM Controller</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d0e12'/%3E%3Ccircle cx='32' cy='32' r='16' fill='none' stroke='%238b5cf6' stroke-width='5'/%3E%3Ccircle cx='32' cy='32' r='4' fill='%238b5cf6'/%3E%3C/svg%3E">
+
+<style>
+  :root {
+    --bg:        #0d0e12;
+    --surface:   #16181f;
+    --surface-2: #1d2029;
+    --border:    #2a2e3a;
+    --text:      #e7e9ef;
+    --muted:     #9aa0ad;
+    --violet:    #8b5cf6;
+    --red:       #ef4444;
+    --green:     #22c55e;
+    --blue:      #3b82f6;
+    --amber:     #f59e0b;
+    --mono: ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    overscroll-behavior: none;
+  }
+
+  body {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 24px);
+    min-height: 100vh;
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 2px 14px;
+    position: sticky;
+    top: 0;
+    background: linear-gradient(var(--bg) 78%, transparent);
+    z-index: 20;
+  }
+  .status { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .dot {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--border); flex-shrink: 0;
+    transition: background .25s;
+  }
+  .dot.connected { background: var(--green); box-shadow: 0 0 10px var(--green); }
+  .dot.connecting { background: var(--amber); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .status-text {
+    font-size: 13px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  button { font-family: inherit; cursor: pointer; border: none; }
+
+  .btn-connect {
+    background: var(--violet); color: #fff;
+    padding: 11px 22px; border-radius: 999px;
+    font-size: 14px; font-weight: 600; flex-shrink: 0;
+    transition: background .2s, transform .05s;
+  }
+  .btn-connect:active { transform: scale(.97); }
+  .btn-connect:disabled { opacity: .5; }
+  .btn-connect.secondary { background: var(--surface-2); color: var(--text); }
+
+  /* ---------- Error / banner ---------- */
+  .banner {
+    background: rgba(239,68,68,.12);
+    border: 1px solid rgba(239,68,68,.4);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    color: #fca5a5;
+  }
+  .banner b { color: #fecaca; display: block; margin-bottom: 2px; }
+  .banner button {
+    background: none; color: #fca5a5; text-decoration: underline;
+    font-size: 12px; padding: 6px 0 0;
+  }
+
+  .unsupported {
+    background: rgba(245,158,11,.12);
+    border: 1px solid rgba(245,158,11,.4);
+    border-radius: 12px; padding: 18px; margin-top: 20px;
+    color: #fcd34d; font-size: 14px; line-height: 1.55;
+  }
+
+  /* ---------- Tabs ---------- */
+  .tabs {
+    display: flex; gap: 2px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  .tab {
+    flex: 1; background: none; color: var(--muted);
+    padding: 12px 4px; font-size: 13px; font-weight: 600;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: color .15s, border-color .15s;
+  }
+  .tab.active { color: var(--violet); border-bottom-color: var(--violet); }
+  .tab .count { font-size: 11px; color: var(--muted); font-weight: 500; }
+
+  .hidden { display: none !important; }
+
+  /* ---------- Start / Stop ---------- */
+  .power {
+    width: 100%; padding: 20px; border-radius: 16px;
+    font-size: 22px; font-weight: 800; letter-spacing: .08em;
+    color: #fff; margin-bottom: 22px;
+    transition: background .15s, transform .05s;
+  }
+  .power:active { transform: scale(.985); }
+  .power.go   { background: var(--green); box-shadow: 0 6px 22px rgba(34,197,94,.3); }
+  .power.stop { background: var(--red);   box-shadow: 0 6px 22px rgba(239,68,68,.3); }
+
+  /* ---------- Sliders ---------- */
+  .slider-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 16px 22px;
+    margin-bottom: 14px;
+  }
+  .slider-card.hero { background: var(--surface-2); }
+  .slider-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .slider-label { font-size: 14px; font-weight: 600; color: var(--text); }
+  .slider-val {
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-weight: 600; color: var(--muted);
+  }
+  .slider-card.hero .slider-val { font-size: 30px; color: var(--text); }
+  .slider-card.hero .slider-label { font-size: 15px; }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 10px; border-radius: 999px;
+    background: var(--surface-2); outline: none; margin: 0;
+  }
+  .hero input[type=range] { background: var(--bg); height: 12px; }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent, var(--violet));
+    border: 3px solid var(--bg);
+    box-shadow: 0 2px 8px rgba(0,0,0,.5);
+    cursor: pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent, var(--violet));
+    border: 3px solid var(--bg); cursor: pointer;
+  }
+  input[type=range]:disabled { opacity: .45; }
+
+  .group { margin-top: 22px; }
+
+  /* ---------- Pattern ---------- */
+  .field-label {
+    display: block; font-size: 13px; font-weight: 600;
+    color: var(--muted); margin: 22px 0 8px;
+  }
+  select, input[type=text], input[type=password] {
+    width: 100%; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 12px;
+    color: var(--text); font-family: inherit; font-size: 15px;
+    padding: 13px 14px; outline: none;
+  }
+  select:focus, input:focus { border-color: var(--violet); }
+  .pattern-desc { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+
+  /* ---------- WiFi ---------- */
+  .wifi-status {
+    border-radius: 12px; padding: 14px; margin-bottom: 18px;
+    font-size: 13px; line-height: 1.7;
+    border: 1px solid var(--border); background: var(--surface);
+  }
+  .wifi-status.ok { border-color: rgba(34,197,94,.4); background: rgba(34,197,94,.08); }
+  .wifi-status .head {
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: 600; margin-bottom: 6px;
+  }
+  .wifi-status.ok .head .state { color: var(--green); }
+  .wifi-status .state { color: var(--amber); }
+  .wifi-status .refresh { background: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
+  .wifi-status .k { color: var(--muted); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .btn-primary {
+    width: 100%; background: var(--violet); color: #fff;
+    padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 600;
+    margin-top: 18px; transition: background .2s;
+  }
+  .btn-primary:disabled { opacity: .45; }
+
+  /* ---------- Logs ---------- */
+  .raw-row { display: flex; gap: 8px; }
+  .raw-row input { font-family: var(--mono); font-size: 13px; }
+  .btn-send {
+    background: var(--violet); color: #fff; border-radius: 12px;
+    padding: 0 18px; font-weight: 600; font-size: 14px; flex-shrink: 0;
+  }
+  .btn-send:disabled { opacity: .45; }
+  .log-box {
+    margin-top: 16px; border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+  }
+  .log-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 14px; background: var(--surface);
+    font-size: 13px; font-weight: 600;
+  }
+  .log-head button { background: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
+  .log-out {
+    height: 300px; overflow-y: auto; background: #06070a;
+    padding: 10px; font-family: var(--mono); font-size: 12px; line-height: 1.6;
+  }
+  .log-empty { color: #4b5160; }
+  .log-line { display: flex; gap: 8px; word-break: break-all; }
+  .log-line .ts { color: #4b5160; flex-shrink: 0; }
+  .log-line .dir { font-weight: 700; flex-shrink: 0; }
+  .dir.TX { color: var(--green); }
+  .dir.RX { color: var(--blue); }
+  .dir.ERR { color: var(--red); }
+  .log-line .msg { color: #c2c7d0; }
+
+  footer { text-align: center; color: #4b5160; font-size: 11px; margin-top: 30px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="status">
+    <span class="dot" id="dot"></span>
+    <span class="status-text" id="statusText">Disconnected</span>
+  </div>
+  <button class="btn-connect" id="connectBtn">Connect</button>
+</header>
+
+<div id="errorBanner" class="banner hidden">
+  <b>Connection error</b>
+  <span id="errorMsg"></span>
+  <button id="dismissError">Dismiss</button>
+</div>
+
+<div id="unsupported" class="unsupported hidden">
+  This browser doesn't support Web Bluetooth. Open this page in <b>Chrome</b> (or Edge / Opera) on
+  Android. Safari and Firefox won't work.
+</div>
+
+<main id="app" class="hidden">
+  <div class="tabs">
+    <button class="tab active" data-tab="controller">Controller</button>
+    <button class="tab" data-tab="wifi">WiFi</button>
+    <button class="tab" data-tab="logs">Logs <span class="count" id="logCount"></span></button>
+  </div>
+
+  <!-- Controller -->
+  <section id="tab-controller">
+    <button class="power go" id="powerBtn">START</button>
+
+    <div class="slider-card hero">
+      <div class="slider-head">
+        <span class="slider-label">Speed</span>
+        <span class="slider-val" id="val-speed">0%</span>
+      </div>
+      <input type="range" id="speed" min="0" max="100" value="0" style="--accent: var(--violet)">
+    </div>
+
+    <div class="group">
+      <div class="slider-card">
+        <div class="slider-head"><span class="slider-label">Depth</span><span class="slider-val" id="val-depth">50%</span></div>
+        <input type="range" id="depth" min="0" max="100" value="50" style="--accent: var(--red)">
+      </div>
+      <div class="slider-card">
+        <div class="slider-head"><span class="slider-label">Stroke</span><span class="slider-val" id="val-stroke">50%</span></div>
+        <input type="range" id="stroke" min="0" max="100" value="50" style="--accent: var(--green)">
+      </div>
+      <div class="slider-card">
+        <div class="slider-head"><span class="slider-label">Sensation</span><span class="slider-val" id="val-sensation">50%</span></div>
+        <input type="range" id="sensation" min="0" max="100" value="50" style="--accent: var(--blue)">
+      </div>
+    </div>
+
+    <label class="field-label" for="pattern">Pattern</label>
+    <select id="pattern"></select>
+    <p class="pattern-desc" id="patternDesc"></p>
+  </section>
+
+  <!-- WiFi -->
+  <section id="tab-wifi" class="hidden">
+    <div id="wifiStatus" class="wifi-status hidden"></div>
+    <label class="field-label" for="ssid">Network name (SSID)</label>
+    <input type="text" id="ssid" placeholder="WiFi network" maxlength="32" autocomplete="off">
+    <label class="field-label" for="pw">Password</label>
+    <input type="password" id="pw" placeholder="WiFi password" maxlength="63" autocomplete="off">
+    <p class="hint">Password must be 8–63 characters.</p>
+    <button class="btn-primary" id="wifiSave" disabled>Save &amp; connect</button>
+  </section>
+
+  <!-- Logs -->
+  <section id="tab-logs" class="hidden">
+    <label class="field-label" for="rawInput">Raw command</label>
+    <div class="raw-row">
+      <input type="text" id="rawInput" placeholder="e.g. set:speed:50">
+      <button class="btn-send" id="rawSend" disabled>Send</button>
+    </div>
+    <div class="log-box">
+      <div class="log-head">
+        <span>Log output</span>
+        <button id="clearLogs">Clear</button>
+      </div>
+      <div class="log-out" id="logOut"><span class="log-empty">No logs yet…</span></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Connects directly to your OSSM over Bluetooth. Nothing leaves your phone.<br>
+  Unofficial controller for the OSSM open-source project.
+</footer>
+
+<script>
+"use strict";
+
+/* ============ BLE constants (from the OSSM web controller) ============ */
+const UUID = {
+  service:       "522b443a-4f53-534d-0001-420badbabe69",
+  command:       "522b443a-4f53-534d-1000-420badbabe69",
+  speedKnobLim:  "522b443a-4f53-534d-1010-420badbabe69",
+  wifiConfig:    "522b443a-4f53-534d-1020-420badbabe69",
+  state:         "522b443a-4f53-534d-2000-420badbabe69",
+  patterns:      "522b443a-4f53-534d-3000-420badbabe69",
+  patternDesc:   "522b443a-4f53-534d-3010-420badbabe69",
+};
+
+const DEFAULT_PATTERNS = [
+  { idx: 0, name: "Simple Stroke" },
+  { idx: 1, name: "Teasing Pounding" },
+  { idx: 2, name: "Robo Stroke" },
+  { idx: 3, name: "Half'n'Half" },
+  { idx: 4, name: "Deeper" },
+  { idx: 5, name: "Stop'n'Go" },
+  { idx: 6, name: "Insist" },
+];
+
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+/* ============ State ============ */
+const S = {
+  device: null,
+  server: null,
+  cmdChar: null,
+  wifiChar: null,
+  connected: false,
+  speed: 0,
+  pausedSpeed: 0,
+  paused: true,
+  patterns: DEFAULT_PATTERNS,
+  logs: [],
+  wakeLock: null,
+};
+
+/* ============ DOM helpers ============ */
+const $ = (id) => document.getElementById(id);
+
+function showError(msg) {
+  $("errorMsg").textContent = msg;
+  $("errorBanner").classList.remove("hidden");
+}
+function clearError() { $("errorBanner").classList.add("hidden"); }
+
+function addLog(dir, data) {
+  const ts = new Date().toISOString().slice(11, 23);
+  S.logs.push({ ts, dir, data });
+  if (S.logs.length > 100) S.logs.shift();
+  renderLogs();
+}
+
+function renderLogs() {
+  const box = $("logOut");
+  $("logCount").textContent = S.logs.length ? `(${S.logs.length})` : "";
+  if (!S.logs.length) { box.innerHTML = '<span class="log-empty">No logs yet…</span>'; return; }
+  box.innerHTML = S.logs.map(l =>
+    `<div class="log-line"><span class="ts">${l.ts}</span>` +
+    `<span class="dir ${l.dir}">${l.dir}</span>` +
+    `<span class="msg">${escapeHtml(l.data)}</span></div>`
+  ).join("");
+  box.scrollTop = box.scrollHeight;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+
+/* ============ Commands ============ */
+async function sendCommand(command) {
+  if (!S.cmdChar) { console.warn("No command characteristic"); return false; }
+  addLog("TX", command);
+  try {
+    await S.cmdChar.writeValue(enc.encode(command));
+    return true;
+  } catch (err) {
+    addLog("ERR", `Send failed: ${err.message}`);
+    showError(`Failed to send: ${err.message}`);
+    return false;
+  }
+}
+
+/* ============ Wake lock (keep screen on while connected) ============ */
+async function requestWakeLock() {
+  try {
+    if ("wakeLock" in navigator) S.wakeLock = await navigator.wakeLock.request("screen");
+  } catch (e) { /* non-fatal */ }
+}
+function releaseWakeLock() {
+  if (S.wakeLock) { S.wakeLock.release().catch(() => {}); S.wakeLock = null; }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && S.connected && !S.wakeLock) requestWakeLock();
+});
+
+/* ============ Connect ============ */
+async function connect() {
+  clearError();
+  setStatus("connecting");
+  try {
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [UUID.service] }],
+      optionalServices: [UUID.service],
+    });
+    S.device = device;
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+
+    const server = await device.gatt.connect();
+    S.server = server;
+    const service = await server.getPrimaryService(UUID.service);
+
+    S.cmdChar = await service.getCharacteristic(UUID.command);
+
+    // WiFi status (optional)
+    try {
+      S.wifiChar = await service.getCharacteristic(UUID.wifiConfig);
+      const raw = dec.decode(await S.wifiChar.readValue());
+      addLog("RX", `wifi: ${raw}`);
+      renderWifiStatus(JSON.parse(raw));
+    } catch (e) { console.warn("No WiFi char", e); }
+
+    // Current state (optional)
+    try {
+      const stateChar = await service.getCharacteristic(UUID.state);
+      const raw = dec.decode(await stateChar.readValue());
+      addLog("RX", `state: ${raw}`);
+      const st = JSON.parse(raw);
+      if (st.speed     !== undefined) { S.speed = st.speed; S.paused = st.speed === 0; }
+      if (st.depth     !== undefined) setSliderValue("depth", st.depth);
+      if (st.stroke    !== undefined) setSliderValue("stroke", st.stroke);
+      if (st.sensation !== undefined) setSliderValue("sensation", st.sensation);
+      if (st.pattern   !== undefined) $("pattern").value = st.pattern;
+    } catch (e) { console.warn("No state", e); }
+
+    // Patterns + descriptions (optional)
+    try {
+      const patternsChar = await service.getCharacteristic(UUID.patterns);
+      const raw = dec.decode(await patternsChar.readValue());
+      addLog("RX", `patterns: ${raw}`);
+      const list = JSON.parse(raw);
+      if (Array.isArray(list) && list.length) {
+        try {
+          const descChar = await service.getCharacteristic(UUID.patternDesc);
+          for (const p of list) {
+            try {
+              await descChar.writeValue(enc.encode(String(p.idx)));
+              p.description = dec.decode(await descChar.readValue());
+            } catch (e) { /* no description for this one */ }
+          }
+        } catch (e) { console.warn("No description char", e); }
+        S.patterns = list;
+      }
+    } catch (e) { console.warn("No patterns, using defaults", e); }
+
+    // Release the physical speed-knob limit
+    try {
+      const knob = await service.getCharacteristic(UUID.speedKnobLim);
+      addLog("TX", "speedKnobLimit: false");
+      await knob.writeValue(enc.encode("false"));
+    } catch (e) { console.warn("No speed-knob char", e); }
+
+    // Enter stroke-engine mode
+    addLog("TX", "go:strokeEngine");
+    await S.cmdChar.writeValue(enc.encode("go:strokeEngine"));
+
+    setStatus("connected");
+    requestWakeLock();
+  } catch (err) {
+    console.error(err);
+    if (err.name !== "NotFoundError") showError(err.message); // user-cancelled chooser = silent
+    setStatus("disconnected");
+  }
+}
+
+async function disconnect() {
+  if (S.cmdChar) {
+    try {
+      addLog("TX", "set:speed:0");
+      await S.cmdChar.writeValue(enc.encode("set:speed:0"));
+      addLog("TX", "go:menu");
+      await S.cmdChar.writeValue(enc.encode("go:menu"));
+    } catch (e) { console.warn(e); }
+  }
+  if (S.server) { try { S.server.disconnect(); } catch (e) {} }
+  resetConnection();
+}
+
+function onDisconnected() {
+  addLog("ERR", "Device disconnected");
+  resetConnection();
+}
+
+function resetConnection() {
+  releaseWakeLock();
+  S.device = null; S.server = null; S.cmdChar = null; S.wifiChar = null;
+  S.speed = 0; S.paused = true;
+  setStatus("disconnected");
+}
+
+/* ============ UI: connection ============ */
+function setStatus(state) {
+  const dot = $("dot"), txt = $("statusText"), btn = $("connectBtn"), app = $("app");
+  dot.className = "dot";
+  if (state === "connected") {
+    S.connected = true;
+    dot.classList.add("connected");
+    txt.textContent = `Connected to ${S.device?.name || "OSSM"}`;
+    btn.textContent = "Disconnect";
+    btn.classList.add("secondary");
+    btn.disabled = false;
+    app.classList.remove("hidden");
+    buildPatterns();
+    setSliderValue("speed", S.speed);
+    refreshPowerBtn();
+  } else if (state === "connecting") {
+    dot.classList.add("connecting");
+    txt.textContent = "Connecting…";
+    btn.textContent = "Connecting…";
+    btn.disabled = true;
+  } else {
+    S.connected = false;
+    txt.textContent = "Disconnected";
+    btn.textContent = "Connect";
+    btn.classList.remove("secondary");
+    btn.disabled = false;
+    app.classList.add("hidden");
+  }
+}
+
+/* ============ UI: sliders ============ */
+function setSliderValue(id, v) {
+  $(id).value = v;
+  $("val-" + id).textContent = v + "%";
+}
+
+function wireSlider(id, makeCommand, onRelease) {
+  const el = $(id);
+  el.addEventListener("input", () => { $("val-" + id).textContent = el.value + "%"; });
+  el.addEventListener("change", () => {
+    const v = parseInt(el.value, 10);
+    if (onRelease) onRelease(v);
+    sendCommand(makeCommand(v));
+  });
+}
+
+/* ============ UI: power (start/stop) ============ */
+function refreshPowerBtn() {
+  const b = $("powerBtn");
+  if (S.paused) { b.textContent = "START"; b.className = "power go"; }
+  else          { b.textContent = "STOP";  b.className = "power stop"; }
+}
+
+async function togglePower() {
+  if (S.paused) {
+    const resume = S.speed > 0 ? S.speed : S.pausedSpeed;
+    S.speed = resume; S.paused = false;
+    setSliderValue("speed", resume);
+    await sendCommand(`set:speed:${resume}`);
+  } else {
+    S.pausedSpeed = S.speed;
+    S.speed = 0; S.paused = true;
+    setSliderValue("speed", 0);
+    if (navigator.vibrate) navigator.vibrate(40);
+    await sendCommand("set:speed:0");
+  }
+  refreshPowerBtn();
+}
+
+/* ============ UI: patterns ============ */
+function buildPatterns() {
+  const sel = $("pattern");
+  sel.innerHTML = S.patterns
+    .map(p => `<option value="${p.idx}">${escapeHtml(p.name)}</option>`).join("");
+  updatePatternDesc();
+}
+function updatePatternDesc() {
+  const idx = parseInt($("pattern").value, 10);
+  const p = S.patterns.find(x => x.idx === idx);
+  $("patternDesc").textContent = p?.description || "";
+}
+
+/* ============ UI: WiFi ============ */
+function renderWifiStatus(st) {
+  const box = $("wifiStatus");
+  box.classList.remove("hidden");
+  box.classList.toggle("ok", !!st.connected);
+  let rows = "";
+  if (st.ssid)               rows += `<div><span class="k">SSID:</span> ${escapeHtml(st.ssid)}</div>`;
+  if (st.ip)                 rows += `<div><span class="k">IP:</span> ${escapeHtml(st.ip)}</div>`;
+  if (st.connected && st.rssi) rows += `<div><span class="k">Signal:</span> ${escapeHtml(st.rssi)} dBm</div>`;
+  box.innerHTML =
+    `<div class="head"><span class="state">${st.connected ? "✓ Connected" : "○ Not connected"}</span>` +
+    `<button class="refresh" id="wifiRefresh">Refresh</button></div>${rows}`;
+  $("wifiRefresh").addEventListener("click", refreshWifi);
+}
+
+async function refreshWifi() {
+  if (!S.wifiChar) return;
+  try { renderWifiStatus(JSON.parse(dec.decode(await S.wifiChar.readValue()))); }
+  catch (e) { console.warn(e); }
+}
+
+async function saveWifi() {
+  const ssid = $("ssid").value, pw = $("pw").value;
+  if (!S.wifiChar || !ssid || pw.length < 8) return;
+  const btn = $("wifiSave");
+  btn.disabled = true; btn.textContent = "Connecting…";
+  addLog("TX", `set:wifi:${ssid}|***`);
+  try {
+    await S.wifiChar.writeValue(enc.encode(`set:wifi:${ssid}|${pw}`));
+    const resp = dec.decode(await S.wifiChar.readValue());
+    addLog("RX", resp);
+    await new Promise(r => setTimeout(r, 2000));
+    renderWifiStatus(JSON.parse(dec.decode(await S.wifiChar.readValue())));
+  } catch (err) {
+    addLog("ERR", `WiFi failed: ${err.message}`);
+    showError(`WiFi config failed: ${err.message}`);
+  } finally {
+    btn.textContent = "Save & connect";
+    validateWifi();
+  }
+}
+function validateWifi() {
+  $("wifiSave").disabled = !($("ssid").value && $("pw").value.length >= 8);
+}
+
+/* ============ Tabs ============ */
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+  ["controller", "wifi", "logs"].forEach(n => $("tab-" + n).classList.toggle("hidden", n !== name));
+}
+
+/* ============ Wire everything up ============ */
+function init() {
+  if (!("bluetooth" in navigator)) {
+    $("unsupported").classList.remove("hidden");
+    $("connectBtn").disabled = true;
+    return;
+  }
+
+  $("connectBtn").addEventListener("click", () => S.connected ? disconnect() : connect());
+  $("dismissError").addEventListener("click", clearError);
+
+  document.querySelectorAll(".tab").forEach(t =>
+    t.addEventListener("click", () => switchTab(t.dataset.tab)));
+
+  $("powerBtn").addEventListener("click", togglePower);
+
+  wireSlider("speed", v => `set:speed:${v}`, v => {
+    S.speed = v;
+    if (v > 0 && S.paused) S.paused = false;
+    if (v === 0) S.paused = true;
+    refreshPowerBtn();
+  });
+  wireSlider("depth",     v => `set:depth:${v}`);
+  wireSlider("stroke",    v => `set:stroke:${v}`);
+  wireSlider("sensation", v => `set:sensation:${v}`);
+
+  $("pattern").addEventListener("change", () => {
+    updatePatternDesc();
+    sendCommand(`set:pattern:${parseInt($("pattern").value, 10)}`);
+  });
+
+  $("ssid").addEventListener("input", validateWifi);
+  $("pw").addEventListener("input", validateWifi);
+  $("wifiSave").addEventListener("click", saveWifi);
+
+  const raw = $("rawInput"), rawSend = $("rawSend");
+  raw.addEventListener("input", () => { rawSend.disabled = !raw.value.trim(); });
+  const fireRaw = () => {
+    const v = raw.value.trim();
+    if (v) { sendCommand(v); raw.value = ""; rawSend.disabled = true; }
+  };
+  rawSend.addEventListener("click", fireRaw);
+  raw.addEventListener("keydown", e => { if (e.key === "Enter") fireRaw(); });
+
+  $("clearLogs").addEventListener("click", () => { S.logs = []; renderLogs(); });
+}
+
+init();
+</script>
+</body>
+</html>
